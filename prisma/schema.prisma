@@ -50,6 +50,7 @@ model User {
   planTransactions   PlanTransaction[]
   sepayTransactions  SepayTransaction[]
   notifications      Notification[]
+  orders             Order[]
 
   @@map("users")
 }
@@ -352,8 +353,30 @@ model PlanPackage {
   updatedAt         DateTime @updatedAt @map("updated_at")
 
   sepayTransactions SepayTransaction[]
+  orders            Order[]
 
   @@map("plan_packages")
+}
+
+model Order {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique
+  userId      Int       @map("user_id")
+  packageId   Int?      @map("package_id")
+  amount      Int
+  status      String    @default("pending")
+  note        String?
+  expiresAt   DateTime  @map("expires_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  package          PlanPackage?      @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  sepayTransaction SepayTransaction?
+
+  @@index([userId])
+  @@index([status])
+  @@map("orders")
 }
 
 model SepayTransaction {
@@ -362,15 +385,17 @@ model SepayTransaction {
   amount          Float
   code            String?
   content         String?
-  accountNumber   String?  @map("account_number")
+  accountNumber   String?
   transactionDate DateTime @map("transaction_date")
   status          String   @default("received")
   userId          Int?     @map("user_id")
   planPackageId   Int?     @map("plan_package_id")
+  orderId         Int?     @unique @map("order_id")
   createdAt       DateTime @default(now()) @map("created_at")
 
   user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
   planPackage PlanPackage? @relation(fields: [planPackageId], references: [id], onDelete: SetNull)
+  order       Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   @@map("sepay_transactions")
 }
