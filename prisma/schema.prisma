@@ -1,0 +1,432 @@
+// Schema này phải đồng bộ với Excel_trainer/prisma/schema.prisma
+// Cả 2 trỏ vào cùng 1 database
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // Dev: SQLite (cùng file với Excel_trainer)
+  // Prod: đổi thành "mysql" và cập nhật DATABASE_URL trong .env
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                Int       @id @default(autoincrement())
+  username          String    @unique
+  passwordHash      String    @map("password_hash")
+  fullName          String?   @map("full_name")
+  email             String?
+  phone             String?
+  countryCode       String    @default("+84") @map("country_code")
+  role              String    @default("student")
+  avatar            String?
+  badge             String?
+  xp                Int       @default(0)
+  level             Int       @default(1)
+  streak            Int       @default(0)
+  plan              String    @default("free")
+  planExpiresAt     DateTime? @map("plan_expires_at")
+  requestDailyCount Int       @default(0) @map("request_daily_count")
+  requestDailyReset DateTime  @default(now()) @map("request_daily_reset")
+  isActive          Boolean   @default(true) @map("is_active")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  classMembers       ClassMember[]
+  sessions           Session[]
+  verificationTokens VerificationToken[]
+  userAttempts       UserAttempt[]
+  createdClasses     Class[]             @relation("ClassTeacher")
+  events             Event[]
+  driveFiles         DriveFile[]
+  userAchievements   UserAchievement[]
+  userProgress       UserProgress[]
+  assignmentUsers    AssignmentUser[]
+  activityLogs       ActivityLog[]
+  assignedBy         Assignment[]        @relation("AssignmentCreator")
+  aiMessages         AiMessage[]
+  planTransactions   PlanTransaction[]
+  sepayTransactions  SepayTransaction[]
+  notifications      Notification[]
+
+  @@map("users")
+}
+
+model Class {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  teacherId   Int?     @map("teacher_id")
+  classCode   String?  @unique @map("class_code")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  teacher      User?         @relation("ClassTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
+  classMembers ClassMember[]
+  programs     Program[]
+
+  @@map("classes")
+}
+
+model ClassMember {
+  id       Int      @id @default(autoincrement())
+  classId  Int      @map("class_id")
+  userId   Int      @map("user_id")
+  joinedAt DateTime @default(now()) @map("joined_at")
+
+  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, userId])
+  @@map("class_members")
+}
+
+model Session {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  token     String
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  id             Int       @id @default(autoincrement())
+  userId         Int       @map("user_id")
+  channel        String
+  tokenHash      String    @unique @map("token_hash")
+  expiresAt      DateTime  @map("expires_at")
+  usedAt         DateTime? @map("used_at")
+  attempts       Int       @default(0)
+  resetTokenHash String?   @map("reset_token_hash")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("verification_tokens")
+}
+
+model Program {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  thumbnail   String?
+  level       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tasks        Task[]
+  classId      Int?           @map("class_id")
+  class        Class?         @relation(fields: [classId], references: [id], onDelete: SetNull)
+  userProgress UserProgress[]
+
+  @@map("programs")
+}
+
+model Task {
+  id          Int      @id @default(autoincrement())
+  programId   Int?     @map("program_id")
+  title       String
+  description String?
+  orderIndex  Int      @default(0) @map("order_index")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  program     Program?     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  exercises   Exercise[]
+  assignments Assignment[]
+
+  @@map("tasks")
+}
+
+model Exercise {
+  id               Int      @id @default(autoincrement())
+  taskId           Int?     @map("task_id")
+  title            String
+  description      String?
+  difficulty       String   @default("easy")
+  expectedFormula  String   @map("expected_formula")
+  cellData         String?
+  explanation      String?
+  requiredFunction String?  @map("required_function")
+  allowAlternative Boolean  @default(true) @map("allow_alternative")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  task         Task?         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userAttempts UserAttempt[]
+  hints        Hint[]
+
+  @@map("exercises")
+}
+
+model UserAttempt {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @map("user_id")
+  exerciseId    Int      @map("exercise_id")
+  userFormula   String?  @map("user_formula")
+  isCorrect     Boolean? @map("is_correct")
+  attemptNumber Int?     @map("attempt_number")
+  feedback      String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([exerciseId])
+  @@map("user_attempts")
+}
+
+model Hint {
+  id         Int     @id @default(autoincrement())
+  exerciseId Int     @map("exercise_id")
+  hintLevel  Int?    @map("hint_level")
+  hintText   String? @map("hint_text")
+  spoilLevel String?
+
+  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@map("hints")
+}
+
+model Achievement {
+  id          Int     @id @default(autoincrement())
+  name        String
+  description String?
+  icon        String?
+  xpReward    Int     @default(0) @map("xp_reward")
+
+  userAchievements UserAchievement[]
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @map("user_id")
+  achievementId Int      @map("achievement_id")
+  earnedAt      DateTime @default(now()) @map("earned_at")
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@map("user_achievements")
+}
+
+model Event {
+  id        Int      @id @default(autoincrement())
+  title     String
+  type      String
+  notes     String?
+  eventDate DateTime @map("event_date")
+  creatorId Int      @map("creator_id")
+
+  creator User @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@map("events")
+}
+
+model DriveFile {
+  id         Int      @id @default(autoincrement())
+  name       String
+  size       Int
+  type       String
+  url        String
+  folder     String?
+  uploaderId Int      @map("uploader_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  uploader User @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  @@map("drive_files")
+}
+
+model Assignment {
+  id          Int       @id @default(autoincrement())
+  taskId      Int?      @map("task_id")
+  assignedBy  Int?      @map("assigned_by")
+  title       String?
+  description String?
+  startTime   DateTime? @map("start_time")
+  endTime     DateTime? @map("end_time")
+  isExam      Boolean   @default(false) @map("is_exam")
+
+  task            Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  assigner        User?            @relation("AssignmentCreator", fields: [assignedBy], references: [id], onDelete: SetNull)
+  assignmentUsers AssignmentUser[]
+
+  @@map("assignments")
+}
+
+model AssignmentUser {
+  id           Int       @id @default(autoincrement())
+  assignmentId Int       @map("assignment_id")
+  userId       Int       @map("user_id")
+  status       String    @default("pending")
+  score        Int?
+  submittedAt  DateTime? @map("submitted_at")
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, userId])
+  @@map("assignment_users")
+}
+
+model UserProgress {
+  id                Int       @id @default(autoincrement())
+  userId            Int       @map("user_id")
+  programId         Int       @map("program_id")
+  completionPercent Int       @default(0) @map("completion_percent")
+  lastAccessedAt    DateTime? @map("last_accessed_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, programId])
+  @@map("user_progress")
+}
+
+model ActivityLog {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @map("user_id")
+  activityDate  DateTime @map("activity_date")
+  activityCount Int      @default(1) @map("activity_count")
+  xpEarned      Int      @default(0) @map("xp_earned")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, activityDate])
+  @@index([userId])
+  @@index([activityDate])
+  @@map("activity_logs")
+}
+
+model AiMessage {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  sessionId String?  @map("session_id")
+  role      String
+  content   String
+  tokens    Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@map("ai_messages")
+}
+
+model PlanTransaction {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @map("user_id")
+  type        String
+  planType    String?   @map("plan_type")
+  expiresAt   DateTime? @map("expires_at")
+  amount      Int
+  description String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("plan_transactions")
+}
+
+model PlanPackage {
+  id                Int      @id @default(autoincrement())
+  name              String
+  plan              String
+  dailyRequestLimit Int      @map("daily_request_limit")
+  durationDays      Int      @default(30) @map("duration_days")
+  price             Int
+  badge             String?
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  sepayTransactions SepayTransaction[]
+
+  @@map("plan_packages")
+}
+
+model SepayTransaction {
+  id              Int      @id @default(autoincrement())
+  sepayId         Int      @unique
+  amount          Float
+  code            String?
+  content         String?
+  accountNumber   String?  @map("account_number")
+  transactionDate DateTime @map("transaction_date")
+  status          String   @default("received")
+  userId          Int?     @map("user_id")
+  planPackageId   Int?     @map("plan_package_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  planPackage PlanPackage? @relation(fields: [planPackageId], references: [id], onDelete: SetNull)
+
+  @@map("sepay_transactions")
+}
+
+model SepayBankAccount {
+  id            Int      @id @default(autoincrement())
+  bankName      String   @map("bank_name")
+  bankCode      String   @map("bank_code")
+  accountNumber String   @map("account_number")
+  accountName   String   @map("account_name")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("sepay_bank_accounts")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  type      String
+  icon      String   @default("🔔")
+  title     String
+  message   String
+  data      String?
+  read      Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model Resource {
+  id         Int      @id @default(autoincrement())
+  title      String
+  type       String
+  url        String?
+  thumbnail  String?
+  content    String?
+  category   String?
+  tags       String?
+  difficulty String?
+  duration   Int?
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("resources")
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
