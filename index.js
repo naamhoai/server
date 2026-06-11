@@ -18,7 +18,7 @@ const releasesDir = path.join(__dirname, 'releases');
 if (!existsSync(releasesDir)) mkdirSync(releasesDir, { recursive: true });
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 
