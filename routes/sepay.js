@@ -264,20 +264,26 @@ async function processOrder(code, amount, transactionId, gateway) {
     const now = new Date();
     const currentUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { planExpiresAt: true },
+      select: { plan: true, planExpiresAt: true },
     });
 
-    const baseDate = currentUser?.planExpiresAt && new Date(currentUser.planExpiresAt) > now
-      ? new Date(currentUser.planExpiresAt)
-      : now;
+    // Còn hạn → cộng dồn ngày vào hạn cũ; hết hạn → tính từ hôm nay
+    const stillActive = currentUser?.planExpiresAt && new Date(currentUser.planExpiresAt) > now;
+    const baseDate = stillActive ? new Date(currentUser.planExpiresAt) : now;
     const newExpiresAt = new Date(baseDate.getTime() + pkg.durationDays * 86400000);
+
+    // KHÔNG hạ cấp: giữ gói CAO NHẤT giữa gói đang còn hạn và gói vừa mua.
+    // VD: đang Pro mà mua thêm Thường → vẫn Pro (+ ngày), không bị tụt xuống Thường.
+    const RANK = { free: 0, regular: 1, pro: 2 };
+    const currentPlan = stillActive ? (currentUser.plan || 'free') : 'free';
+    const resultPlan = (RANK[pkg.plan] ?? 0) >= (RANK[currentPlan] ?? 0) ? pkg.plan : currentPlan;
 
     const xpReward = Math.floor(pkg.price / 1000);
 
     await prisma.user.update({
       where: { id: userId },
       data: {
-        plan: pkg.plan,
+        plan: resultPlan,
         planExpiresAt: newExpiresAt,
         requestDailyCount: 0,
         xp: { increment: xpReward },
